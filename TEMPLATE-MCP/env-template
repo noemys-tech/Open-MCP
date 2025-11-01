@@ -1,0 +1,19 @@
+# MCP Template Server - Environment Variables
+# Copy this file to .env and configure your values
+
+# JWT Secret Key (REQUIRED for production)
+# Generate with: openssl rand -base64 32
+# Or PowerShell: $bytes = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes); [Convert]::ToBase64String($bytes)
+JWT_SECRET=your_secure_jwt_secret_here_min_32_chars
+
+# Server Port
+SERVER_PORT=9091
+
+# OAuth Configuration
+OAUTH_ISSUER=http://localhost:9091
+TOKEN_EXPIRATION_SECONDS=3600
+REFRESH_TOKEN_EXPIRATION_SECONDS=86400
+
+# Session Configuration
+SESSION_TIMEOUT_MINUTES=30
+

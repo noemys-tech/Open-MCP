@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Console appender that outputs to STDERR -->
+    <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.err</target>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Root logger -->
+    <root level="INFO">
+        <appender-ref ref="STDERR" />
+    </root>
+
+    <!-- MCP Template package logger -->
+    <logger name="fr.noemys.template" level="INFO" additivity="false">
+        <appender-ref ref="STDERR" />
+    </logger>
+
+    <!-- Reduce Spring Boot startup noise -->
+    <logger name="org.springframework" level="WARN" additivity="false">
+        <appender-ref ref="STDERR" />
+    </logger>
+    
+    <logger name="org.springframework.boot" level="WARN" additivity="false">
+        <appender-ref ref="STDERR" />
+    </logger>
+</configuration>
+
