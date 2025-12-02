@@ -4,13 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import fr.noemys.s3.model.JsonRpcRequest;
 import fr.noemys.s3.model.JsonRpcResponse;
 import fr.noemys.s3.model.SessionInfo;
-import fr.noemys.s3.model.oauth.ClientRegistration;
-import fr.noemys.s3.model.oauth.OAuthMetadata;
-import fr.noemys.s3.model.oauth.TokenRequest;
-import fr.noemys.s3.model.oauth.TokenResponse;
 import fr.noemys.s3.service.McpService;
 import fr.noemys.s3.service.SessionService;
-import fr.noemys.s3.service.oauth.OAuthService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -22,10 +17,9 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 import java.util.Map;
 
 /**
- * MCP HTTP Controller for MCP 2025-06-18 with OAuth 2.1 and HTTP Streaming
- * Production-ready version with strict authentication
+ * MCP HTTP Controller for MCP 2025-06-18 with HTTP Streaming (without OAuth)
  * 
- * @version 1.0.0
+ * @version 1.0.1 - OAuth removed, simplified session management
  */
 @RestController
 public class McpHttpController {
@@ -33,121 +27,49 @@ public class McpHttpController {
     private static final Logger log = LoggerFactory.getLogger(McpHttpController.class);
     private static final String SESSION_HEADER = "Mcp-Session-Id";
     
-    private final OAuthService oauthService;
     private final SessionService sessionService;
     private final McpService mcpService;
     private final ObjectMapper objectMapper;
     
     public McpHttpController(
-            OAuthService oauthService,
             SessionService sessionService,
             McpService mcpService,
             ObjectMapper objectMapper) {
-        this.oauthService = oauthService;
         this.sessionService = sessionService;
         this.mcpService = mcpService;
         this.objectMapper = objectMapper;
     }
     
     /**
-     * OAuth 2.1 Authorization Server Metadata (RFC 8414)
-     */
-    @GetMapping("/.well-known/oauth-authorization-server")
-    public ResponseEntity<OAuthMetadata> getOAuthMetadata() {
-        log.info("GET /.well-known/oauth-authorization-server");
-        OAuthMetadata metadata = oauthService.getMetadata();
-        return ResponseEntity.ok(metadata);
-    }
-    
-    /**
-     * OAuth 2.1 Client Registration (RFC 7591)
-     */
-    @PostMapping("/oauth/register")
-    public ResponseEntity<ClientRegistration> registerClient(@RequestBody ClientRegistration request) {
-        log.info("POST /oauth/register - Client: {}", request.getClientName());
-        
-        try {
-            ClientRegistration registration = oauthService.registerClient(request);
-            return ResponseEntity.status(HttpStatus.CREATED).body(registration);
-        } catch (Exception e) {
-            log.error("Error registering client", e);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-        }
-    }
-    
-    /**
-     * OAuth 2.1 Token Endpoint
-     */
-    @PostMapping("/oauth/token")
-    public ResponseEntity<TokenResponse> generateToken(@RequestBody TokenRequest request) {
-        log.info("POST /oauth/token - Grant type: {}", request.getGrantType());
-        
-        try {
-            TokenResponse token = oauthService.generateToken(request);
-            return ResponseEntity.ok(token);
-        } catch (IllegalArgumentException e) {
-            log.error("Invalid token request", e);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-        } catch (Exception e) {
-            log.error("Error generating token", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-    
-    /**
-     * Create MCP Session - Requires valid OAuth token
+     * Create MCP Session - Simplified (no OAuth required)
      */
     @PostMapping("/mcp/session")
     public ResponseEntity<Map<String, String>> createSession(
-            @RequestHeader(value = "Authorization", required = true) String authorization) {
+            @RequestBody(required = false) Map<String, String> request) {
         log.info("POST /mcp/session");
         
-        // Extract access token from Authorization header
-        String accessToken = null;
-        if (authorization != null && authorization.startsWith("Bearer ")) {
-            accessToken = authorization.substring(7);
-        }
-        
-        if (accessToken == null || !oauthService.validateToken(accessToken)) {
-            log.warn("Invalid or missing access token");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .header("WWW-Authenticate", "Bearer realm=\"MCP Server\"")
-                    .build();
-        }
-        
-        String clientId = oauthService.getClientIdFromToken(accessToken);
-        SessionInfo session = sessionService.createSession(clientId, accessToken);
+        String clientId = request != null ? request.getOrDefault("clientId", "anonymous") : "anonymous";
+        SessionInfo session = sessionService.createSession(clientId);
         
         return ResponseEntity.ok(Map.of("sessionId", session.getSessionId()));
     }
     
     /**
      * MCP Streaming Endpoint - POST (Send JSON-RPC requests)
-     * Production mode: Requires valid session, NO anonymous sessions
+     * Simplified: Auto-creates session if not provided
      */
     @PostMapping(value = "/mcp", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<JsonRpcResponse> mcpPost(
             @RequestHeader(value = SESSION_HEADER, required = false) String sessionId,
-            @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody String requestBody) {
         
-        log.info("POST /mcp - Session: {}, Authorization: {}", 
-                sessionId, authorization != null ? "present" : "null");
+        log.info("POST /mcp - Session: {}", sessionId);
         
-        // Try to create session from Authorization header if no session ID provided
+        // Auto-create session if not provided or invalid
         if (sessionId == null || !sessionService.validateSession(sessionId)) {
-            SessionInfo autoSession = createSessionFromAuthorization(authorization);
-            
-            if (autoSession != null) {
-                sessionId = autoSession.getSessionId();
-                log.info("Auto-created session from Authorization header: {}", sessionId);
-            } else {
-                log.warn("No valid session or credentials provided - rejecting request");
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .header("WWW-Authenticate", "Bearer realm=\"MCP Server\"")
-                        .body(JsonRpcResponse.error(null, -32001, 
-                                "Authentication required. Please provide Mcp-Session-Id header or valid Authorization Bearer token."));
-            }
+            SessionInfo autoSession = sessionService.createSession("anonymous");
+            sessionId = autoSession.getSessionId();
+            log.info("Auto-created session: {}", sessionId);
         }
         
         // Update session last access
@@ -176,30 +98,6 @@ public class McpHttpController {
     }
     
     /**
-     * Create session from Authorization header - Production mode (NO anonymous fallback)
-     */
-    private SessionInfo createSessionFromAuthorization(String authorization) {
-        try {
-            // Try to extract token from Authorization header
-            if (authorization != null && authorization.startsWith("Bearer ")) {
-                String accessToken = authorization.substring(7);
-                if (oauthService.validateToken(accessToken)) {
-                    String clientId = oauthService.getClientIdFromToken(accessToken);
-                    return sessionService.createSession(clientId, accessToken);
-                }
-            }
-            
-            // Production mode: NO anonymous sessions
-            log.error("No valid credentials provided, rejecting request");
-            return null;
-            
-        } catch (Exception e) {
-            log.error("Error creating session from authorization", e);
-            return null;
-        }
-    }
-    
-    /**
      * MCP Streaming Endpoint - GET (Receive server-initiated messages)
      */
     @GetMapping(value = "/mcp", produces = MediaType.APPLICATION_NDJSON_VALUE)
@@ -208,19 +106,22 @@ public class McpHttpController {
         
         log.info("GET /mcp - Session: {}", sessionId);
         
-        // Validate session
+        // Auto-create session if not provided
         if (sessionId == null || !sessionService.validateSession(sessionId)) {
-            log.warn("Invalid or missing session ID");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            SessionInfo autoSession = sessionService.createSession("anonymous");
+            sessionId = autoSession.getSessionId();
+            log.info("Auto-created session for streaming: {}", sessionId);
         }
         
         // Update session last access
         sessionService.updateLastAccess(sessionId);
         
+        final String finalSessionId = sessionId;
+        
         // Stream response body
         StreamingResponseBody stream = outputStream -> {
             try {
-                log.info("Streaming connection established for session: {}", sessionId);
+                log.info("Streaming connection established for session: {}", finalSessionId);
                 
                 // Send a keep-alive message
                 String keepAlive = "{\"type\":\"heartbeat\",\"timestamp\":\"" + 
@@ -234,6 +135,7 @@ public class McpHttpController {
         };
         
         return ResponseEntity.ok()
+                .header(SESSION_HEADER, finalSessionId)
                 .header("Transfer-Encoding", "chunked")
                 .header("X-Content-Type-Options", "nosniff")
                 .body(stream);
@@ -246,13 +148,10 @@ public class McpHttpController {
     public ResponseEntity<Map<String, Object>> root() {
         return ResponseEntity.ok(Map.of(
                 "name", "MCP S3 Server",
-                "version", "1.0.0",
+                "version", "1.0.1",
                 "protocol", "MCP 2025-06-18",
                 "endpoints", Map.of(
                         "health", "/health",
-                        "oauth_metadata", "/.well-known/oauth-authorization-server",
-                        "oauth_register", "/oauth/register",
-                        "oauth_token", "/oauth/token",
                         "mcp_session", "/mcp/session",
                         "mcp", "/mcp"
                 ),
@@ -267,7 +166,7 @@ public class McpHttpController {
     public ResponseEntity<Map<String, String>> health() {
         return ResponseEntity.ok(Map.of(
                 "status", "UP",
-                "version", "1.0.0",
+                "version", "1.0.1",
                 "protocol", "MCP 2025-06-18"
         ));
     }
@@ -326,4 +225,3 @@ public class McpHttpController {
         }
     }
 }
-

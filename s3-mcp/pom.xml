@@ -14,9 +14,9 @@
 
     <groupId>fr.noemys</groupId>
     <artifactId>s3-mcp</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <name>MCP S3 Server</name>
-    <description>Model Context Protocol Server for S3/MinIO - MCP 2025-06-18 with HTTP Streaming and OAuth 2.1</description>
+    <description>Model Context Protocol Server for S3/MinIO - MCP 2025-06-18 with HTTP Streaming (OAuth removed)</description>
 
     <properties>
         <java.version>21</java.version>
@@ -50,25 +50,6 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
-        
-        <!-- JWT for OAuth tokens -->
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-api</artifactId>
-            <version>0.11.5</version>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-impl</artifactId>
-            <version>0.11.5</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-jackson</artifactId>
-            <version>0.11.5</version>
-            <scope>runtime</scope>
-        </dependency>
 
         <!-- Lombok for reducing boilerplate -->
         <dependency>
@@ -80,7 +61,7 @@
         <!-- SLF4J for logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
-            <artifactId>slf-api</artifactId>
+            <artifactId>slf4j-api</artifactId>
         </dependency>
 
         <!-- AWS SDK v2 for S3 -->
