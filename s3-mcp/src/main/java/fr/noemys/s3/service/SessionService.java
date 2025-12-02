@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Session Service for managing MCP HTTP streaming sessions
  * 
- * @version 1.0.0
+ * @version 1.0.1 - Simplified without OAuth
  */
 @Service
 public class SessionService {
@@ -28,9 +28,9 @@ public class SessionService {
     private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();
     
     /**
-     * Create a new session
+     * Create a new session (simplified without OAuth)
      */
-    public SessionInfo createSession(String clientId, String accessToken) {
+    public SessionInfo createSession(String clientId) {
         log.info("Creating new session for client: {}", clientId);
         
         String sessionId = UUID.randomUUID().toString();
@@ -39,7 +39,6 @@ public class SessionService {
         SessionInfo session = SessionInfo.builder()
                 .sessionId(sessionId)
                 .clientId(clientId)
-                .accessToken(accessToken)
                 .creationTime(now)
                 .lastAccessTime(now)
                 .expiresAt(now.plusSeconds(sessionTimeoutMinutes * 60))
@@ -112,4 +111,3 @@ public class SessionService {
         });
     }
 }
-

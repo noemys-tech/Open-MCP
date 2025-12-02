@@ -25,9 +25,6 @@ public class SessionInfo {
     @JsonProperty("clientId")
     private String clientId;
     
-    @JsonProperty("accessToken")
-    private String accessToken;
-    
     @JsonProperty("creationTime")
     private Instant creationTime;
     
